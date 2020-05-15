@@ -1,0 +1,14 @@
+- defaults:
+    link:
+      create: true
+      relink: true
+
+- link:
+    ~/.gitconfig: git/gitconfig
+- link:
+    ~/.zshrc: shell/zsh/.zshrc
+    ~/.config/zsh/aliases.zsh: shell/zsh/aliases.zsh
+    ~/.config/zsh/prompt.zsh: shell/zsh/prompt.zsh
+    ~/.config/zsh/custom.zsh: shell/zsh/custom.zsh
+
+- clean: ['~']

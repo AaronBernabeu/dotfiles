@@ -1,0 +1,1 @@
+alias gbg="gb | grep $1"
