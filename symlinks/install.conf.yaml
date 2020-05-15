@@ -14,3 +14,6 @@
     ~/.config/zsh/custom.zsh: shell/zsh/custom.zsh
 
 - clean: ['~']
+
+- shell:
+    - gsettings set org.gnome.shell.extensions.dash-to-dock dock-position BOTTOM
