@@ -3,8 +3,11 @@
       create: true
       relink: true
 
+# git
 - link:
     ~/.gitconfig: git/gitconfig
+
+# shell
 - link:
     ~/.zshrc:
       path: shell/zsh/.zshrc
@@ -16,9 +19,4 @@
 - clean: ['~']
 
 - shell:
-    - gsettings set org.gnome.shell.extensions.dash-to-dock dock-position BOTTOM
-    - gsettings set org.gnome.shell.extensions.dash-to-dock multi-monitor true
-    - gsettings set org.gnome.shell.extensions.dash-to-dock dock-fixed false
-    - gsettings set org.gnome.shell.extensions.dash-to-dock extend-height false
-    - gsettings set org.gnome.shell.extensions.dash-to-dock click-action 'minimize'
-    - gsettings set org.gnome.shell favorite-apps "['org.gnome.Nautilus.desktop', 'org.gnome.Screenshot.desktop', 'google-chrome.desktop', 'slack_slack.desktop', 'org.gnome.Terminal.desktop', 'telegram-desktop_telegram-desktop.desktop', 'jetbrains-toolbox.desktop']"
+    - sh linux/gsettings.sh
