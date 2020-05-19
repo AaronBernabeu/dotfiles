@@ -22,3 +22,7 @@ gsettings set org.gnome.desktop.interface gtk-enable-primary-paste false
 
 # Action when pressing in the central part of a window <- None
 gsettings set org.gnome.desktop.wm.preferences action-middle-click-titlebar 'none'
+
+# Disable ctrl + alt + (left || right)
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-left "[]"
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-right "[]"
