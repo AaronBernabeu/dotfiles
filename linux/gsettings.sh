@@ -12,7 +12,7 @@ gsettings set org.gnome.shell.extensions.dash-to-dock extend-height false
 gsettings set org.gnome.shell.extensions.dash-to-dock click-action 'minimize'
 
 # Favorite apps
-gsettings set org.gnome.shell favorite-apps "['org.gnome.Nautilus.desktop', 'org.gnome.Screenshot.desktop', 'google-chrome.desktop', 'slack_slack.desktop', 'org.gnome.Terminal.desktop', 'telegram-desktop_telegram-desktop.desktop', 'jetbrains-toolbox.desktop']"
+gsettings set org.gnome.shell favorite-apps "['org.gnome.Nautilus.desktop', 'org.gnome.Screenshot.desktop', 'slack_slack.desktop', 'telegram-desktop_telegram-desktop.desktop', 'google-chrome.desktop', 'org.gnome.Terminal.desktop', 'jetbrains-toolbox.desktop']"
 
 # Date in the top bar <- Activated
 gsettings set org.gnome.desktop.interface clock-show-weekday true
