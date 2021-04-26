@@ -16,6 +16,7 @@
     ~/.config/zsh/aliases.zsh: shell/zsh/aliases.zsh
     ~/.config/zsh/prompt.zsh: shell/zsh/prompt.zsh
     ~/.config/zsh/custom.zsh: shell/zsh/custom.zsh
+    ~/.config/zsh/private.zsh: shell/zsh/private.zsh
 
 - clean: ['~']
 
