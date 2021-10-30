@@ -18,3 +18,12 @@ source $ZSH/oh-my-zsh.sh
 for i in $HOME/.config/zsh/*; do
     test -r "$i" && source "$i"
 done
+
+# The next line updates PATH for the Google Cloud SDK.
+if [ -f '/home/aaron/google-cloud-sdk/path.zsh.inc' ]; then . '/home/aaron/google-cloud-sdk/path.zsh.inc'; fi
+
+# The next line enables shell command completion for gcloud.
+if [ -f '/home/aaron/google-cloud-sdk/completion.zsh.inc' ]; then . '/home/aaron/google-cloud-sdk/completion.zsh.inc'; fi
+
+source <(kubectl completion zsh)
+source <(helm completion zsh)
