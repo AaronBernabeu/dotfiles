@@ -1,3 +1,5 @@
 [user]
 	name = Aaron
-	email = aaron.bernabeu@pccomponentes.com
+	email = aaron.bernabeu@thecolvinco.com
+[pull]
+	rebase = true
