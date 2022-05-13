@@ -4,6 +4,9 @@
 gsettings set org.gnome.shell.extensions.desktop-icons show-home false
 gsettings set org.gnome.shell.extensions.desktop-icons show-trash false
 
+# Desktop workspaces
+gsettings set org.gnome.desktop.wm.preferences num-workspaces 1
+
 # Dock
 gsettings set org.gnome.shell.extensions.dash-to-dock dock-position BOTTOM
 gsettings set org.gnome.shell.extensions.dash-to-dock multi-monitor true
