@@ -10,6 +10,12 @@ gsettings set org.gnome.shell.extensions.dash-to-dock multi-monitor true
 gsettings set org.gnome.shell.extensions.dash-to-dock dock-fixed false
 gsettings set org.gnome.shell.extensions.dash-to-dock extend-height false
 gsettings set org.gnome.shell.extensions.dash-to-dock click-action 'minimize'
+gsettings set org.gnome.shell.extensions.dash-to-dock background-opacity 0.7
+gsettings set org.gnome.shell.extensions.dash-to-dock custom-theme-customize-running-dots true
+gsettings set org.gnome.shell.extensions.dash-to-dock custom-theme-running-dots-border-color '#e95420'
+gsettings set org.gnome.shell.extensions.dash-to-dock custom-theme-running-dots-color '#e95420'
+gsettings set org.gnome.shell.extensions.dash-to-dock scroll-switch-workspace false
+gsettings set org.gnome.shell.extensions.dash-to-dock scroll-action 'do-nothing'
 
 # Favorite apps
 gsettings set org.gnome.shell favorite-apps "['org.gnome.Nautilus.desktop', 'org.gnome.Screenshot.desktop', 'slack_slack.desktop', 'telegram-desktop_telegram-desktop.desktop', 'google-chrome.desktop', 'org.gnome.Terminal.desktop', 'jetbrains-toolbox.desktop']"
