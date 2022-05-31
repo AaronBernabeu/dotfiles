@@ -1,5 +1,9 @@
 [user]
 	name = Aaron
 	email = aaronidasbr@gmail.com
+	signingkey = 4736DEAF099DC9DB
 [pull]
 	rebase = true
+
+[commit]
+	gpgsign = true
