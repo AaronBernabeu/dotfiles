@@ -22,12 +22,24 @@ if [ -f '~/google-cloud-sdk/path.zsh.inc' ]; then . '~/google-cloud-sdk/path.zsh
 # The next line enables shell command completion for gcloud.
 if [ -f '~/google-cloud-sdk/completion.zsh.inc' ]; then . '~/google-cloud-sdk/completion.zsh.inc'; fi
 
-source <(kubectl completion zsh)
-source <(helm completion zsh)
+function _load_completion() {
+    local cmd=$1
+    local cache=~/.cache/zsh/${cmd}_completion
+    if [[ ! -f $cache || $(command $cmd version --short 2>/dev/null) != $(cat ${cache}.version 2>/dev/null) ]]; then
+        mkdir -p ~/.cache/zsh
+        command $cmd completion zsh > $cache
+        command $cmd version --short 2>/dev/null > ${cache}.version
+    fi
+    source $cache
+}
+_load_completion kubectl
+_load_completion helm
 
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+function nvm() { unset -f nvm node npm npx && [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" && nvm "$@" }
+function node() { unset -f nvm node npm npx && [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" && node "$@" }
+function npm() { unset -f nvm node npm npx && [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" && npm "$@" }
+function npx() { unset -f nvm node npm npx && [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" && npx "$@" }
 
 autoload -U +X bashcompinit && bashcompinit
 complete -o nospace -C /usr/bin/terraform terraform
