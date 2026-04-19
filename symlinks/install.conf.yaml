@@ -18,6 +18,15 @@
     ~/.config/zsh/custom.zsh: shell/zsh/custom.zsh
     ~/.config/zsh/private.zsh: shell/zsh/private.zsh
 
+# kitty
+- link:
+    ~/.config/kitty/kitty.conf: shell/kitty/kitty.conf
+    ~/.config/kitty/current-theme.conf: shell/kitty/current-theme.conf
+
+# starship
+- link:
+    ~/.config/starship.toml: starship/starship.toml
+
 - clean: ['~']
 
 - shell:

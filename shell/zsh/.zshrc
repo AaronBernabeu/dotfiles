@@ -2,8 +2,8 @@
 
 export ZSH="$HOME/.oh-my-zsh"
 
-ZSH_THEME="random"
-ZSH_THEME_RANDOM_CANDIDATES=( "robbyrussell" "agnoster" "af-magic" "junkfood" "ys" )
+#ZSH_THEME="random"
+#ZSH_THEME_RANDOM_CANDIDATES=( "robbyrussell" "agnoster" "af-magic" "junkfood" "ys" )
 
 plugins=(
   git
@@ -27,3 +27,14 @@ if [ -f '~/google-cloud-sdk/completion.zsh.inc' ]; then . '~/google-cloud-sdk/co
 
 source <(kubectl completion zsh)
 source <(helm completion zsh)
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+autoload -U +X bashcompinit && bashcompinit
+complete -o nospace -C /usr/bin/terraform terraform
+
+eval "$(starship init zsh)"
+
+export PATH="$HOME/.local/bin:$PATH"

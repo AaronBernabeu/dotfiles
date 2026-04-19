@@ -16,3 +16,10 @@ alias ksf='kubectl get statefulsets -o wide'
 alias kpv='kubectl get pv -o wide'
 alias kpvc='kubectl get pvc -o wide'
 alias docker-compose='docker compose'
+
+alias ls='eza --icons --group-directories-first'
+alias ll='eza -lh --icons --group-directories-first'
+alias la='eza -a --icons --group-directories-first'
+alias tree='eza --tree --icons'
+
+alias cat='batcat --style=plain --paging=never'
