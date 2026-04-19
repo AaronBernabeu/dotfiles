@@ -3,5 +3,3 @@ if [ -n "$BASH_VERSION" ]; then
         . "$HOME/.bashrc"
     fi
 fi
-
-export IBUS_ENABLE_SYNC_MODE = 1
