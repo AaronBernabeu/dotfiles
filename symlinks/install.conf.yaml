@@ -28,6 +28,10 @@
 - link:
     ~/.config/starship.toml: starship/starship.toml
 
+# fastfetch
+- link:
+    ~/.config/fastfetch/config.jsonc: shell/fastfetch/config.jsonc
+
 - clean: ['~']
 
 - shell:

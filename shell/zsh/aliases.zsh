@@ -23,3 +23,5 @@ alias la='eza -a --icons --group-directories-first'
 alias tree='eza --tree --icons'
 
 alias cat='batcat --style=plain --paging=never'
+
+alias fff='fastfetch -c examples/25.jsonc'
