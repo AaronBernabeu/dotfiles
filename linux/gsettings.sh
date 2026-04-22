@@ -21,7 +21,7 @@ gsettings set org.gnome.shell.extensions.dash-to-dock scroll-switch-workspace fa
 gsettings set org.gnome.shell.extensions.dash-to-dock scroll-action 'do-nothing'
 
 # Favorite apps
-gsettings set org.gnome.shell favorite-apps "['org.gnome.Nautilus.desktop', 'org.gnome.Screenshot.desktop', 'slack_slack.desktop', 'telegram-desktop_telegram-desktop.desktop', 'brave-browser.desktop', 'kitty.desktop', 'jetbrains-toolbox.desktop']"
+gsettings set org.gnome.shell favorite-apps "['org.gnome.Nautilus.desktop', 'org.gnome.Screenshot.desktop', 'slack.desktop', 'telegram-desktop_telegram-desktop.desktop', 'brave-browser.desktop', 'kitty.desktop', 'jetbrains-toolbox.desktop']"
 
 # Date in the top bar <- Activated
 gsettings set org.gnome.desktop.interface clock-show-weekday true
