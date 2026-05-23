@@ -32,6 +32,14 @@
 - link:
     ~/.config/fastfetch/config.jsonc: shell/fastfetch/config.jsonc
 
+# claude
+- link:
+    ~/.claude/settings.json: claude/settings.json
+
+# bin
+- link:
+    ~/.local/bin/pixoo-claude-usage: bin/pixoo-claude-usage
+
 - clean: ['~']
 
 - shell:

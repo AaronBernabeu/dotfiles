@@ -1,0 +1,16 @@
+{
+  "verbose": false,
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pixoo-claude-usage &>/dev/null &"
+          }
+        ]
+      }
+    ]
+  }
+}

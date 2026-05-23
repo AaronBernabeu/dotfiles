@@ -1,0 +1,114 @@
+#!/bin/bash
+
+PIXOO_IP="192.168.0.3"
+CREDENTIALS_FILE="$HOME/.claude/.credentials.json"
+BASE_URL="http://$PIXOO_IP:5000"
+
+# Barra: x=4 a x=57 = 54px de ancho
+BAR_X_START=4
+BAR_X_END=57
+BAR_W=54
+
+TOKEN=$(grep -o '"accessToken": *"[^"]*"' "$CREDENTIALS_FILE" | grep -o '"[^"]*"$' | tr -d '"')
+
+if [ -z "$TOKEN" ]; then
+    echo "Error: No se pudo leer el token de Claude Code."
+    exit 1
+fi
+
+HEADERS=$(curl -s -D - -o /dev/null \
+    "https://api.anthropic.com/v1/messages" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "anthropic-version: 2023-06-01" \
+    -H "anthropic-beta: oauth-2025-04-20" \
+    -H "Content-Type: application/json" \
+    -H "User-Agent: claude-code/2.1.5" \
+    -d '{"model":"claude-haiku-4-5-20251001","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}')
+
+USE_5H=$(echo "$HEADERS" | grep -i "anthropic-ratelimit-unified-5h-utilization" | awk '{print $2}' | tr -d '\r')
+USE_7D=$(echo "$HEADERS" | grep -i "anthropic-ratelimit-unified-7d-utilization" | awk '{print $2}' | tr -d '\r')
+
+if [ -z "$USE_5H" ] || [ -z "$USE_7D" ]; then
+    echo "No se pudieron obtener los límites de las cabeceras."
+    exit 1
+fi
+
+PCT_5H=$(echo "$USE_5H * 100" | bc | cut -d'.' -f1)
+PCT_7D=$(echo "$USE_7D * 100" | bc | cut -d'.' -f1)
+
+FILL_5H=$(echo "$PCT_5H * $BAR_W / 100" | bc)
+FILL_7D=$(echo "$PCT_7D * $BAR_W / 100" | bc)
+
+BAR_END_5H=$((BAR_X_START + FILL_5H))
+BAR_END_7D=$((BAR_X_START + FILL_7D))
+
+draw() {
+    local endpoint=$1; shift
+    curl -s -X POST "$BASE_URL/$endpoint" "$@" > /dev/null
+}
+
+# Limpiar pantalla
+draw fill -F "r=0" -F "g=0" -F "b=0" -F "push_immediately=false"
+
+# Título
+draw text \
+    -F "text=CLAUDE USE" \
+    -F "x=5" -F "y=2" \
+    -F "r=255" -F "g=255" -F "b=255" \
+    -F "push_immediately=false"
+
+# Etiqueta 5H
+draw text \
+    -F "text=5H: ${PCT_5H}%" \
+    -F "x=4" -F "y=14" \
+    -F "r=0" -F "g=255" -F "b=100" \
+    -F "push_immediately=false"
+
+# Fondo barra 5H (verde oscuro)
+draw rectangle \
+    -F "top_left_x=$BAR_X_START" -F "top_left_y=22" \
+    -F "bottom_right_x=$BAR_X_END" -F "bottom_right_y=26" \
+    -F "r=0" -F "g=40" -F "b=15" \
+    -F "push_immediately=false"
+
+# Relleno barra 5H (verde)
+if [ "$FILL_5H" -gt 0 ]; then
+    draw rectangle \
+        -F "top_left_x=$BAR_X_START" -F "top_left_y=22" \
+        -F "bottom_right_x=$BAR_END_5H" -F "bottom_right_y=26" \
+        -F "r=0" -F "g=255" -F "b=100" \
+        -F "push_immediately=false"
+fi
+
+# Etiqueta 7D
+draw text \
+    -F "text=7D: ${PCT_7D}%" \
+    -F "x=4" -F "y=34" \
+    -F "r=0" -F "g=200" -F "b=255" \
+    -F "push_immediately=false"
+
+# Fondo barra 7D (cian oscuro)
+draw rectangle \
+    -F "top_left_x=$BAR_X_START" -F "top_left_y=42" \
+    -F "bottom_right_x=$BAR_X_END" -F "bottom_right_y=46" \
+    -F "r=0" -F "g=30" -F "b=40" \
+    -F "push_immediately=false"
+
+# Relleno barra 7D (cian) — push final
+if [ "$FILL_7D" -gt 0 ]; then
+    draw rectangle \
+        -F "top_left_x=$BAR_X_START" -F "top_left_y=42" \
+        -F "bottom_right_x=$BAR_END_7D" -F "bottom_right_y=46" \
+        -F "r=0" -F "g=200" -F "b=255" \
+        -F "push_immediately=true"
+else
+    # Si ambas barras están vacías, hacer push con el último rectángulo ya enviado
+    # Forzamos push redibujando el fondo 7D con push_immediately=true
+    draw rectangle \
+        -F "top_left_x=$BAR_X_START" -F "top_left_y=42" \
+        -F "bottom_right_x=$BAR_X_END" -F "bottom_right_y=46" \
+        -F "r=0" -F "g=30" -F "b=40" \
+        -F "push_immediately=true"
+fi
+
+echo "Pixoo actualizado: 5H=${PCT_5H}% 7D=${PCT_7D}%"
