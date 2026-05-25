@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Dark theme
+gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+gsettings set org.gnome.desktop.interface gtk-theme 'Yaru-dark'
+
 # Icons on the desktop <- Disabled
 gsettings set org.gnome.shell.extensions.ding show-home false
 gsettings set org.gnome.shell.extensions.ding show-trash false
