@@ -14,7 +14,7 @@ $c\
 $rust\
 $golang\
 $nodejs\
-$php\
+${custom.php_version}\
 $java\
 $kotlin\
 $haskell\
@@ -165,6 +165,14 @@ style = "bg:lavender"
 disabled = false
 show_notifications = true
 min_time_to_notify = 45000
+
+
+[custom.php_version]
+command = "jq -r '.require.php // empty' composer.json | tr -dc '0-9.'"
+when = "test -f composer.json"
+symbol = ""
+style = "bg:green"
+format = '[[ $symbol( $output) ](fg:crust bg:green)]($style)'
 
 [palettes.catppuccin_mocha]
 rosewater = "#f5e0dc"
