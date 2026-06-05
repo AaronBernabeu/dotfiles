@@ -27,6 +27,9 @@ gsettings set org.gnome.shell.extensions.dash-to-dock scroll-action 'do-nothing'
 # Favorite apps
 gsettings set org.gnome.shell favorite-apps "['org.gnome.Nautilus.desktop', 'org.gnome.Screenshot.desktop', 'slack.desktop', 'org.telegram.desktop.desktop', 'brave-browser.desktop', 'kitty.desktop', 'jetbrains-toolbox.desktop']"
 
+# Daily update check
+gsettings set com.ubuntu.update-notifier regular-auto-launch-interval 1
+
 # Date in the top bar <- Activated
 gsettings set org.gnome.desktop.interface clock-show-weekday true
 
