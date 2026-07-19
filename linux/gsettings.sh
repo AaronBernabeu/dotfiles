@@ -29,6 +29,7 @@ gsettings set org.gnome.shell favorite-apps "['org.gnome.Nautilus.desktop', 'org
 
 # Daily update check
 gsettings set com.ubuntu.update-notifier regular-auto-launch-interval 1
+gsettings set com.ubuntu.update-notifier show-updates-status-icon true
 
 # Date in the top bar <- Activated
 gsettings set org.gnome.desktop.interface clock-show-weekday true

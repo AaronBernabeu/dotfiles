@@ -3,11 +3,17 @@
 PIXOO_IP="192.168.0.3"
 CREDENTIALS_FILE="$HOME/.claude/.credentials.json"
 BASE_URL="http://$PIXOO_IP:5000"
+CURL_OPTS="--connect-timeout 1 --max-time 3"
 
 # Barra: x=4 a x=57 = 54px de ancho
 BAR_X_START=4
 BAR_X_END=57
 BAR_W=54
+
+# Salir rápido si el Pixoo no está accesible (p.ej. fuera de la red local)
+if ! curl -s $CURL_OPTS -o /dev/null "$BASE_URL"; then
+    exit 0
+fi
 
 TOKEN=$(grep -o '"accessToken": *"[^"]*"' "$CREDENTIALS_FILE" | grep -o '"[^"]*"$' | tr -d '"')
 
@@ -16,7 +22,7 @@ if [ -z "$TOKEN" ]; then
     exit 1
 fi
 
-HEADERS=$(curl -s -D - -o /dev/null \
+HEADERS=$(curl -s $CURL_OPTS -D - -o /dev/null \
     "https://api.anthropic.com/v1/messages" \
     -H "Authorization: Bearer $TOKEN" \
     -H "anthropic-version: 2023-06-01" \
