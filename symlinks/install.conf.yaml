@@ -33,15 +33,14 @@
 - link:
     ~/.config/fastfetch/config.jsonc: shell/fastfetch/config.jsonc
 
-# claude
-- link:
-    ~/.claude/settings.json: claude/settings.json
-
 # bin
 - link:
     ~/.local/bin/pixoo-claude-usage: bin/pixoo-claude-usage
 
 - clean: ['~']
 
+# claude: merge our fragment into ~/.claude/settings.json without
+# clobbering what other installers (orca, gentle-ai, ...) write there
 - shell:
     - sh linux/gsettings.sh
+    - [bash claude/install-settings.sh, Merging Claude Code settings]

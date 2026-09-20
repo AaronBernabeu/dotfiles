@@ -1,4 +1,6 @@
 {
+  "theme": "dark",
+  "verbose": false,
   "hooks": {
     "Stop": [
       {
@@ -11,7 +13,5 @@
         ]
       }
     ]
-  },
-  "theme": "dark",
-  "verbose": false
+  }
 }
