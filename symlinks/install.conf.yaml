@@ -17,6 +17,7 @@
     ~/.config/zsh/custom.zsh: shell/zsh/custom.zsh
     ~/.config/zsh/completions.zsh: shell/zsh/completions.zsh
     ~/.config/zsh/nvm.zsh: shell/zsh/nvm.zsh
+    ~/.config/zsh/go.zsh: shell/zsh/go.zsh
     ~/.config/zsh/private.zsh: shell/zsh/private.zsh
 
 # kitty
