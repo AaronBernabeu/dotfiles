@@ -9,6 +9,10 @@
           {
             "type": "command",
             "command": "pixoo-claude-usage &>/dev/null &"
+          },
+          {
+            "type": "command",
+            "command": "slack-status on claude &>/dev/null &"
           }
         ]
       }

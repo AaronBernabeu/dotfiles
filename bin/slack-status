@@ -1,0 +1,527 @@
+#!/usr/bin/env python3
+"""slack-status - layered Slack status/DND manager.
+
+Layers are named blobs (emoji + text + priority + optional expiration +
+optional DND request) that get merged into a single Slack profile status and
+DND snooze.
+
+Designed to be safe to call from Claude Code hooks: `on`, `off`, `push` and
+`pomodoro` never fail the caller. Whatever goes wrong is written to error.log
+and the process still exits 0, so a broken config can never break a Claude
+Code session.
+"""
+
+import json
+import math
+import os
+import random
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+HOME = os.path.expanduser("~")
+XDG_STATE = os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local", "state")
+
+ACTIONS_FILE = os.environ.get(
+    "SLACK_STATUS_ACTIONS", os.path.join(HOME, ".config", "slack-status", "actions.json")
+)
+ENV_FILE = os.environ.get(
+    "SLACK_STATUS_ENV", os.path.join(HOME, ".config", "slack-status", "env")
+)
+STATE_DIR = os.environ.get("SLACK_STATUS_STATE", os.path.join(XDG_STATE, "slack-status"))
+
+LAYERS_FILE = os.path.join(STATE_DIR, "layers.json")
+LAST_PUSH_FILE = os.path.join(STATE_DIR, "last-push.json")
+ERROR_LOG = os.path.join(STATE_DIR, "error.log")
+
+# Overridable so the Slack calls can be pointed at a local mock in tests.
+SLACK_API = os.environ.get("SLACK_STATUS_API_BASE", "https://slack.com/api")
+
+DEFAULT_PRIO = 50
+MAX_STATUS_LEN = 100  # Slack's status_text limit
+MAX_SNOOZE_MINUTES = 1440  # cap for a DND layer that never expires
+ERROR_LOG_MAX_LINES = 500
+HTTP_TIMEOUT = 8
+
+
+# --- logging ---------------------------------------------------------------
+
+
+def log_error(msg):
+    """Report to stderr and to the log file, since the hook entry points are silent."""
+    print("slack-status: %s" % msg, file=sys.stderr)
+    line = "[%s] %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), msg)
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(ERROR_LOG, "a", encoding="utf-8") as fh:
+            fh.write(line)
+        # Keep the log bounded: it is appended to on every Claude Code prompt
+        # while the token is missing, and nothing else ever prunes it.
+        if os.path.getsize(ERROR_LOG) > ERROR_LOG_MAX_LINES * 200:
+            with open(ERROR_LOG, encoding="utf-8") as fh:
+                tail = fh.readlines()[-ERROR_LOG_MAX_LINES:]
+            write_atomic(ERROR_LOG, "".join(tail))
+    except OSError:
+        pass  # logging must never be the thing that breaks us
+
+
+# --- files -----------------------------------------------------------------
+
+
+def write_atomic(path, content):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(content)
+    os.replace(tmp, path)
+
+
+def read_json(path, fallback):
+    """Read a JSON object, falling back on anything unreadable or corrupt."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            value = json.load(fh)
+        return value if isinstance(value, dict) else fallback
+    except (OSError, ValueError):
+        return fallback
+
+
+def write_json(path, value):
+    write_atomic(path, json.dumps(value, indent=2, ensure_ascii=False) + "\n")
+
+
+def load_actions():
+    """Load actions.json. Raises with a readable message so callers can log it."""
+    try:
+        with open(ACTIONS_FILE, encoding="utf-8") as fh:
+            actions = json.load(fh)
+    except FileNotFoundError:
+        raise UserError("actions config not found: %s" % ACTIONS_FILE)
+    except ValueError as exc:
+        raise UserError("actions config is not valid JSON: %s (%s)" % (ACTIONS_FILE, exc))
+    if not isinstance(actions, dict):
+        raise UserError("actions config must be a JSON object: %s" % ACTIONS_FILE)
+    return actions
+
+
+def read_token():
+    """Parse the env file for SLACK_USER_TOKEN.
+
+    Parsed, not executed: the file is shell-sourceable by convention but we
+    never hand it to a shell.
+    """
+    try:
+        with open(ENV_FILE, encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return ""
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        key, sep, value = line.partition("=")
+        if sep and key.strip() == "SLACK_USER_TOKEN":
+            return value.strip().strip("'\"")
+    return ""
+
+
+class UserError(Exception):
+    """A problem worth reporting to the user, not a crash."""
+
+
+# --- layers ----------------------------------------------------------------
+
+
+def read_layers():
+    layers = read_json(LAYERS_FILE, {})
+    return {k: v for k, v in layers.items() if isinstance(v, dict)}
+
+
+def gc_layers(layers, now):
+    """Drop layers whose `until` has passed. `until` of None means never."""
+    return {
+        name: layer
+        for name, layer in layers.items()
+        if layer.get("until") is None or layer["until"] > now
+    }
+
+
+def sorted_layers(layers):
+    """Highest priority first; ties broken by most recently set."""
+    items = [dict(layer, name=name) for name, layer in layers.items()]
+    return sorted(
+        items,
+        key=lambda la: (la.get("prio", DEFAULT_PRIO), la.get("set_at", 0)),
+        reverse=True,
+    )
+
+
+def truncate(text):
+    if len(text) <= MAX_STATUS_LEN:
+        return text
+    return text[: MAX_STATUS_LEN - 1] + "…"
+
+
+def merge(ordered, now):
+    """Collapse the sorted layers into the single status Slack will show."""
+    if not ordered:
+        return {"emoji": "", "text": "", "expiration": 0, "dnd": False, "dnd_until": 0, "dnd_minutes": 0}
+
+    # Trimming from the tail keeps the top layer's text intact for free, since
+    # it is the head of the join.
+    text = truncate(", ".join(la.get("text", "") for la in ordered))
+
+    if any(la.get("until") is None for la in ordered):
+        expiration = 0  # Slack's "no expiration"
+    else:
+        expiration = max(la["until"] for la in ordered)
+
+    dnd_layers = [la for la in ordered if la.get("dnd") is True]
+    # Absolute end time rather than a duration: it stays stable across pushes,
+    # so a status-only change does not look like a new snooze.
+    dnd_until = 0
+    if dnd_layers:
+        dnd_until = max(
+            now + MAX_SNOOZE_MINUTES * 60 if la.get("until") is None else la["until"]
+            for la in dnd_layers
+        )
+
+    return {
+        "emoji": ordered[0].get("emoji", ""),
+        "text": text,
+        "expiration": expiration,
+        "dnd": bool(dnd_layers),
+        "dnd_until": dnd_until,
+        "dnd_minutes": max(1, math.ceil((dnd_until - now) / 60)) if dnd_layers else 0,
+    }
+
+
+def current_merged():
+    """GC the stored layers, persist the result, and return (ordered, merged)."""
+    now = int(time.time())
+    layers = read_layers()
+    alive = gc_layers(layers, now)
+    if alive != layers:
+        write_json(LAYERS_FILE, alive)
+    ordered = sorted_layers(alive)
+    return ordered, merge(ordered, now)
+
+
+# --- Slack -----------------------------------------------------------------
+
+
+def slack_call(method, token, payload=None, form=None):
+    """POST to a Slack method. Returns the parsed body, or None when it failed."""
+    if form is not None:
+        data = urllib.parse.urlencode(form).encode()
+        content_type = "application/x-www-form-urlencoded"
+    else:
+        data = json.dumps(payload).encode("utf-8")
+        content_type = "application/json; charset=utf-8"
+
+    req = urllib.request.Request(
+        "%s/%s" % (SLACK_API, method),
+        data=data,
+        headers={"Authorization": "Bearer " + token, "Content-Type": content_type},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        log_error("%s failed: %s" % (method, exc))
+        return None
+
+    if not body.get("ok"):
+        log_error("%s failed: %s" % (method, body.get("error", "unknown_error")))
+        return None
+    return body
+
+
+def do_push():
+    ordered, merged = current_merged()
+
+    token = read_token()
+    if not token:
+        log_error("SLACK_USER_TOKEN is not set, skipping Slack push")
+        return
+
+    # The hash deliberately excludes dnd_minutes, which changes every second.
+    state = {k: merged[k] for k in ("emoji", "text", "expiration", "dnd")}
+    digest = json.dumps(state, sort_keys=True)
+
+    last = read_json(LAST_PUSH_FILE, {})
+    changed = digest != last.get("hash")
+    status_owned = last.get("status_owned") is True
+    dnd_owned = last.get("dnd_owned") is True
+    has_status = bool(merged["text"] or merged["emoji"])
+
+    # Only clear Slack when the status currently showing is one we set --
+    # otherwise we would wipe a status the user set by hand.
+    if changed and (has_status or status_owned):
+        ok = slack_call(
+            "users.profile.set",
+            token,
+            payload={
+                "profile": {
+                    "status_text": merged["text"],
+                    "status_emoji": merged["emoji"],
+                    "status_expiration": merged["expiration"],
+                }
+            },
+        )
+        if ok:
+            status_owned = has_status
+
+    # Re-snooze only when the snooze actually needs to change -- not on every
+    # status edit, which would mean a DND call on every Claude Code prompt for
+    # as long as a pomodoro is running.
+    dnd_until = merged["dnd_until"]
+    if merged["dnd"]:
+        if not dnd_owned or last.get("dnd_until") != dnd_until:
+            if slack_call("dnd.setSnooze", token, form={"num_minutes": merged["dnd_minutes"]}):
+                dnd_owned = True
+    elif dnd_owned:
+        # Same rule as the status: never cancel a DND the user enabled by hand.
+        if slack_call("dnd.endSnooze", token, form={}):
+            dnd_owned = False
+            dnd_until = 0
+
+    write_json(
+        LAST_PUSH_FILE,
+        {"hash": digest, "status_owned": status_owned, "dnd_owned": dnd_owned, "dnd_until": dnd_until},
+    )
+
+
+# --- commands ---------------------------------------------------------------
+
+
+def parse_flags(args):
+    flags, i = {}, 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--no-push":
+            flags["no_push"] = True
+            i += 1
+        elif arg in ("--ttl", "--text", "--emoji", "--prio") and i + 1 < len(args):
+            flags[arg[2:]] = args[i + 1]
+            i += 2
+        else:
+            raise UserError("unknown or incomplete option: %s" % arg)
+    return flags
+
+
+def as_int(value, label):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise UserError("%s must be a number, got: %r" % (label, value))
+
+
+def cmd_on(args):
+    if not args:
+        raise UserError("on: missing action name")
+    name, flags = args[0], parse_flags(args[1:])
+
+    action = load_actions().get(name)
+    if action is None:
+        raise UserError("unknown action: %s" % name)
+
+    emojis, texts = action.get("emoji") or [], action.get("text") or []
+    if not emojis or not texts:
+        raise UserError("action %r needs a non-empty emoji and text array" % name)
+
+    # Two independent picks. A one-element array therefore always yields the
+    # same value, with no special case for it.
+    emoji = flags.get("emoji") or random.choice(emojis)
+    text = flags.get("text") or random.choice(texts)
+    prio = as_int(flags["prio"], "--prio") if "prio" in flags else action.get("prio", DEFAULT_PRIO)
+
+    ttl = as_int(flags["ttl"], "--ttl") if "ttl" in flags else action.get("ttl")
+    now = int(time.time())
+
+    layers = read_layers()
+    layers[name] = {
+        "emoji": emoji,
+        "text": text,
+        "prio": prio,
+        "until": now + ttl if ttl else None,
+        "dnd": action.get("dnd") is True,
+        "set_at": now,
+    }
+    write_json(LAYERS_FILE, layers)
+
+    if not flags.get("no_push"):
+        do_push()
+
+
+def cmd_off(args):
+    if args:
+        layers = read_layers()
+        layers.pop(args[0], None)
+    else:
+        layers = {}
+    write_json(LAYERS_FILE, layers)
+    do_push()
+
+
+def cmd_list(args):
+    actions = load_actions()
+    row = "%-12s %-6s %-8s %-6s %-7s %-7s"
+    print(row % ("NAME", "PRIO", "TTL", "DND", "EMOJIS", "TEXTS"))
+    for name, action in actions.items():
+        print(
+            row
+            % (
+                name,
+                action.get("prio", DEFAULT_PRIO),
+                action.get("ttl", "-"),
+                str(action.get("dnd") is True).lower(),
+                len(action.get("emoji") or []),
+                len(action.get("text") or []),
+            )
+        )
+
+
+def cmd_show(args):
+    ordered, merged = current_merged()
+    if not ordered:
+        print("No active layers.")
+        return
+
+    print("Active layers:")
+    for layer in ordered:
+        print(
+            "  - %s (prio %s)%s: %s %s"
+            % (
+                layer["name"],
+                layer.get("prio", DEFAULT_PRIO),
+                " [dnd]" if layer.get("dnd") else "",
+                layer.get("emoji", ""),
+                layer.get("text", ""),
+            )
+        )
+    print()
+    print("Merged status:")
+    print("  emoji:      %s" % merged["emoji"])
+    print("  text:       %s (%d chars)" % (merged["text"], len(merged["text"])))
+    if merged["expiration"]:
+        when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(merged["expiration"]))
+    else:
+        when = "never"
+    print("  expiration: %s" % when)
+    print("  dnd:        %s" % ("yes (%d min)" % merged["dnd_minutes"] if merged["dnd"] else "no"))
+
+
+def cmd_push(args):
+    do_push()
+
+
+def cmd_check(args):
+    problems = []
+    actions = load_actions()  # raises UserError on unreadable/invalid JSON
+
+    for name, action in actions.items():
+        if not isinstance(action, dict):
+            problems.append("action %r must be an object" % name)
+            continue
+        for key in ("emoji", "text"):
+            value = action.get(key)
+            if not isinstance(value, list) or not value:
+                problems.append("action %r has an empty or missing %s array" % (name, key))
+        for key in ("prio", "ttl"):
+            if key in action and not isinstance(action[key], (int, float)):
+                problems.append("action %r has a non-numeric %s" % (name, key))
+        if "dnd" in action and not isinstance(action["dnd"], bool):
+            problems.append("action %r has a non-boolean dnd" % name)
+
+    for problem in problems:
+        print("FAIL: %s" % problem)
+
+    if not os.path.exists(ENV_FILE):
+        print("WARN: env file not found: %s" % ENV_FILE)
+    elif read_token():
+        print("OK: env file exists and SLACK_USER_TOKEN is set")  # never print the token
+    else:
+        print("WARN: SLACK_USER_TOKEN is not set in %s" % ENV_FILE)
+
+    print("check: %s" % ("PASSED" if not problems else "FAILED"))
+    return 0 if not problems else 1
+
+
+def cmd_pomodoro(args):
+    sub = args[0] if args else ""
+    if sub == "stop":
+        return cmd_off(["pomodoro"])
+    if sub == "status":
+        layer = read_layers().get("pomodoro")
+        until = layer.get("until") if layer else None
+        remaining = until - int(time.time()) if until else 0
+        if not layer:
+            print("No pomodoro active.")
+        elif until is None:
+            print("Pomodoro active (no expiration set).")
+        elif remaining <= 0:
+            print("No pomodoro active.")
+        else:
+            print("%02d:%02d remaining" % (remaining // 60, remaining % 60))
+        return
+    if sub:
+        return cmd_on(["pomodoro", "--ttl", str(as_int(sub, "minutes") * 60)])
+    return cmd_on(["pomodoro"])
+
+
+USAGE = """slack-status - layered Slack status/DND manager
+
+Usage:
+  slack-status on <action> [--ttl SECONDS] [--text "..."] [--emoji :x:] [--prio N] [--no-push]
+  slack-status off [<action>]
+  slack-status list
+  slack-status show
+  slack-status push
+  slack-status check
+  slack-status pomodoro [minutes|stop|status]
+  slack-status help
+
+Environment:
+  SLACK_STATUS_ACTIONS   path to actions.json (default: ~/.config/slack-status/actions.json)
+  SLACK_STATUS_ENV       path to env file with SLACK_USER_TOKEN (default: ~/.config/slack-status/env)
+  SLACK_STATUS_STATE     path to state directory (default: ~/.local/state/slack-status)
+  SLACK_STATUS_API_BASE  Slack API base URL (override for testing)"""
+
+COMMANDS = {
+    "on": cmd_on,
+    "off": cmd_off,
+    "list": cmd_list,
+    "show": cmd_show,
+    "push": cmd_push,
+    "check": cmd_check,
+    "pomodoro": cmd_pomodoro,
+}
+
+# These run from Claude Code hooks, so they must never fail the caller.
+NEVER_FAIL = {"on", "off", "push", "pomodoro"}
+
+
+def main(argv):
+    name = argv[0] if argv else "help"
+    if name in ("help", "-h", "--help") or name not in COMMANDS:
+        print(USAGE)
+        return 0
+
+    try:
+        return COMMANDS[name](argv[1:]) or 0
+    except UserError as exc:
+        log_error(str(exc))
+        return 0 if name in NEVER_FAIL else 1
+    except Exception as exc:  # noqa: BLE001 - a hook must not take the session down
+        log_error("%s: unexpected %s: %s" % (name, type(exc).__name__, exc))
+        return 0 if name in NEVER_FAIL else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

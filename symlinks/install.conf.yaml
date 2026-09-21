@@ -36,6 +36,11 @@
 # bin
 - link:
     ~/.local/bin/pixoo-claude-usage: bin/pixoo-claude-usage
+    ~/.local/bin/slack-status: bin/slack-status
+
+# slack-status
+- link:
+    ~/.config/slack-status/actions.json: slack-status/actions.json
 
 - clean: ['~']
 
